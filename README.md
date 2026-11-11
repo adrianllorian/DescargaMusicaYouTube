@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/v/release/adrianllorian/DescargaMusicaYouTube?style=flat-square&label=versi%C3%B3n" alt="Versión">
   <img src="https://img.shields.io/badge/Windows-10%2F11-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/descarga-95%20MB-2ea44f?style=flat-square" alt="Tamaño">
+  <img src="https://img.shields.io/badge/descarga-85%20MB-2ea44f?style=flat-square" alt="Tamaño">
   <img src="https://img.shields.io/badge/licencia-Apache%202.0-yellow?style=flat-square" alt="Licencia">
 </p>
 
@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <strong>Windows 10/11 · 64 bits · 95 MB · sin instalación · se actualiza solo</strong>
+  <strong>Windows 10/11 · 64 bits · 85 MB · sin instalación · se actualiza solo</strong>
 </p>
 
 ---
@@ -54,7 +54,7 @@ Descarga siempre la última versión desde este enlace fijo:
 **[Videos MP3 Downloader (última versión)](https://github.com/adrianllorian/DescargaMusicaYouTube/releases/latest/download/Videos.MP3.Downloader.exe)**
 
 - Archivo: `Videos.MP3.Downloader.exe`
-- Tamaño: unos 95 MB
+- Tamaño: unos 85 MB
 - Sistema: Windows 10/11 de 64 bits
 - No necesita instalador: se ejecuta directamente.
 

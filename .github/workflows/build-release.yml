@@ -13,6 +13,8 @@ on:
       - 'requirements.txt'
       - 'iconos/**'
       - 'licenses/**'
+      - 'README.md'
+      - 'LICENSE'
       - '.github/workflows/build-release.yml'
   schedule:
     # Lunes a las 06:00 UTC
