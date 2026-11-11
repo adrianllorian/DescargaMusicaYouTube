@@ -68,7 +68,7 @@ python -m PyInstaller gui.spec --noconfirm --clean
 if errorlevel 1 goto error
 
 rem --- Copiar README junto al .exe ---
-if exist "README.txt" copy /y "README.txt" "dist\README.txt" >nul
+if exist "README.md" copy /y "README.md" "dist\README.md" >nul
 
 echo.
 echo ============================================================
