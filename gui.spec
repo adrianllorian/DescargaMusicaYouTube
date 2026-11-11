@@ -9,7 +9,7 @@ a = Analysis(
         ('iconos', 'iconos'),
         ('licenses', 'licenses'),
     ],
-    hiddenimports=['yt_dlp', 'PIL._tkinter_finder'],
+    hiddenimports=['PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

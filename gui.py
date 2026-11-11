@@ -21,12 +21,14 @@ import threading
 import time
 import tkinter as tk
 import traceback
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
-from yt_dlp.utils import DownloadCancelled
 
+import actualizador
 from config import (
+    APP_VERSION,
     CALIDAD_PREDETERMINADA,
     CALIDADES,
     FFMPEG_PATH,
@@ -36,6 +38,7 @@ from config import (
     mensaje_ffmpeg_faltante,
 )
 from funciones import (
+    DescargaCancelada,
     descargar_audio,
     descargar_miniatura,
     es_url_valida,
@@ -67,6 +70,9 @@ lista_descargas = []
 trabajando = False
 _cola_ui = queue.Queue()
 _estado_timer = None
+_actualizacion_app = None
+_actualizando_app = False
+_ultimo_progreso_update = 0.0
 
 ICONOS = {
     "carpeta": os.path.join(ICONOS_PATH, "folder.png"),
@@ -647,7 +653,7 @@ def _trabajador(items, destino, calidad, convertir_432hz):
                     convertir_432hz=convertir_432hz,
                     cancel_event=item['cancel'],
                 )
-            except DownloadCancelled:
+            except DescargaCancelada:
                 cancelados += 1
                 ui(_finalizar_cancelado, item)
             except Exception as e:
@@ -700,6 +706,122 @@ def descargar_todos():
 
 
 # ----------------------------------------------------------------------
+# Actualizaciones
+# ----------------------------------------------------------------------
+
+def _aplicar_resultado_actualizaciones(resultado, forzar=False):
+    global _actualizacion_app
+    info = resultado.get('app') or {}
+    _actualizacion_app = info
+
+    if info.get('disponible'):
+        label_actualizacion.config(
+            text=f"Hay una versión nueva: {info.get('version')} "
+                 f"(tienes {info.get('actual')})."
+        )
+        frame_actualizacion.grid()
+        boton_actualizar.config(state='normal')
+        mostrar_estado(f"Actualización disponible: {info.get('version')}")
+    else:
+        frame_actualizacion.grid_remove()
+
+    if resultado.get('ytdlp_cambio'):
+        mostrar_estado(
+            f"Motor de descarga actualizado a yt-dlp {resultado.get('ytdlp')}."
+        )
+    elif resultado.get('ytdlp_error') and not os.path.isfile(
+            actualizador.YTDLP_PATH):
+        mostrar_estado(
+            "No se pudo preparar yt-dlp: " + resultado.get('ytdlp_error'),
+            error=True,
+        )
+    elif forzar:
+        if info.get('error'):
+            mostrar_estado(f"No se pudo comprobar la app: {info['error']}", error=True)
+        elif info.get('disponible'):
+            pass
+        else:
+            mostrar_estado("La aplicación y el motor ya están actualizados.")
+
+
+def _comprobar_actualizaciones(forzar=False):
+    try:
+        resultado = actualizador.comprobar_todo(
+            progreso=_progreso_update, forzar=forzar
+        )
+        ui(_aplicar_resultado_actualizaciones, resultado, forzar)
+    except Exception as e:
+        ui(mostrar_estado, f"Error comprobando actualizaciones: {e}", True)
+
+
+def _progreso_update(hecho, total, texto):
+    global _ultimo_progreso_update
+    ahora = time.monotonic()
+    if ahora - _ultimo_progreso_update < 0.25 and total and hecho < total:
+        return
+    _ultimo_progreso_update = ahora
+    if total:
+        porcentaje = max(0, min(100, int(hecho * 100 / total)))
+        ui(mostrar_estado, f"{texto}: {porcentaje}%")
+    else:
+        ui(mostrar_estado, f"{texto}...")
+
+
+def _actualizar_app_click():
+    global _actualizando_app
+    if _actualizando_app:
+        return
+    if not _actualizacion_app or not _actualizacion_app.get('disponible'):
+        threading.Thread(target=_comprobar_actualizaciones, args=(True,),
+                         daemon=True).start()
+        mostrar_estado("Buscando actualizaciones...")
+        return
+
+    info = _actualizacion_app
+    if not getattr(sys, 'frozen', False):
+        webbrowser.open(info.get('url') or
+                        'https://github.com/adrianllorian/DescargaMusicaYouTube/releases')
+        return
+
+    if not messagebox.askyesno(
+            "Actualizar aplicación",
+            f"Se descargará la versión {info.get('version')} y la aplicación "
+            "se reiniciará para instalarla.\n\n¿Continuar?"):
+        return
+
+    _actualizando_app = True
+    boton_actualizar.config(state='disabled')
+    mostrar_estado("Descargando actualización...")
+    threading.Thread(target=_descargar_actualizacion_app,
+                     args=(info,), daemon=True).start()
+
+
+def _descargar_actualizacion_app(info):
+    global _actualizando_app
+    try:
+        nuevo = actualizador.descargar_actualizacion_app(
+            info, _progreso_update
+        )
+        actualizador.instalar_actualizacion_app(nuevo)
+        ui(_cerrar_para_actualizar)
+    except Exception as e:
+        _actualizando_app = False
+        ui(_error_actualizacion, str(e))
+
+
+def _cerrar_para_actualizar():
+    mostrar_estado("Reiniciando para aplicar la actualización...")
+    ventana.after(600, ventana.destroy)
+
+
+def _error_actualizacion(mensaje):
+    global _actualizando_app
+    _actualizando_app = False
+    boton_actualizar.config(state='normal')
+    mostrar_estado(f"No se pudo actualizar: {mensaje}", error=True)
+
+
+# ----------------------------------------------------------------------
 # Interfaz
 # ----------------------------------------------------------------------
 
@@ -715,6 +837,12 @@ menubar = tk.Menu(ventana)
 ventana.config(menu=menubar)
 ayuda_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="Ayuda", menu=ayuda_menu)
+ayuda_menu.add_command(
+    label="Buscar actualizaciones",
+    command=lambda: threading.Thread(
+        target=_comprobar_actualizaciones, args=(True,), daemon=True
+    ).start(),
+)
 ayuda_menu.add_command(label="Acerca de", command=mostrar_acerca)
 ayuda_menu.add_command(label="Descargo de responsabilidad",
                        command=mostrar_descargo_responsabilidad)
@@ -836,6 +964,21 @@ frame_estado.columnconfigure(0, weight=1)
 label_estado_app = ttk.Label(frame_estado, text="", style='TLabel', anchor='w')
 label_estado_app.grid(row=0, column=0, sticky='ew')
 
+# Aviso de actualización de la aplicación
+frame_actualizacion = ttk.Frame(frame_controles, style='TFrame')
+frame_actualizacion.grid(row=5, column=0, pady=(4, 0), sticky='ew')
+frame_actualizacion.columnconfigure(0, weight=1)
+label_actualizacion = ttk.Label(
+    frame_actualizacion, text="", style='TLabel', anchor='w'
+)
+label_actualizacion.grid(row=0, column=0, sticky='ew')
+boton_actualizar = ttk.Button(
+    frame_actualizacion, text="Actualizar", command=_actualizar_app_click,
+    style='Agregar.TButton',
+)
+boton_actualizar.grid(row=0, column=1, padx=(8, 0))
+frame_actualizacion.grid_remove()
+
 # --- Lista con scroll ---
 frame_lista = ttk.Frame(ventana, style='TFrame')
 frame_lista.grid(row=1, column=0, sticky='nsew', pady=8, padx=12)
@@ -896,7 +1039,7 @@ ventana.bind_all('<Down>', _tecla_flecha)
 # --- Pie de página ---
 label_copyright = tk.Label(
     ventana,
-    text="Copyright © 2025 Bochi",
+    text=f"Copyright © 2025 Bochi · v{APP_VERSION}",
     bg=FONDO,
     fg='#aaaaaa',
     font=('Helvetica', 9),
@@ -929,4 +1072,7 @@ def _revisar_ffmpeg():
 
 
 ventana.after(300, _revisar_ffmpeg)
+ventana.after(1500, lambda: threading.Thread(
+    target=_comprobar_actualizaciones, args=(False,), daemon=True
+).start())
 ventana.mainloop()

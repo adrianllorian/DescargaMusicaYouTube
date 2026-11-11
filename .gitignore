@@ -15,6 +15,9 @@ ffmpeg/
 # Copias de seguridad locales
 backup_originales/
 
+# Motor de descarga externo actualizable (yt-dlp.exe / deno.exe)
+tools/
+
 # Temporales
 .temp/
 *.part

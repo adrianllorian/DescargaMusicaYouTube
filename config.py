@@ -15,6 +15,8 @@ import os
 import platform
 import sys
 
+from version import APP_VERSION
+
 
 def _carpeta_recursos():
     """
@@ -40,7 +42,26 @@ def _carpeta_recursos():
 
 BASE_DIR = _carpeta_recursos()
 
+# Carpeta real del programa. En un .exe de PyInstaller, _MEIPASS es una
+# carpeta temporal; los ejecutables auxiliares (yt-dlp/Deno) deben vivir
+# junto al .exe para sobrevivir a las actualizaciones.
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TOOLS_DIR = os.path.join(APP_DIR, 'tools')
+
 _EXT = '.exe' if platform.system() == 'Windows' else ''
+
+YTDLP_PATH = os.path.join(TOOLS_DIR, 'yt-dlp' + _EXT)
+DENO_PATH = os.path.join(TOOLS_DIR, 'deno' + _EXT)
+UPDATE_STATE_PATH = os.path.join(TOOLS_DIR, 'update_state.json')
+
+APP_REPO = 'adrianllorian/DescargaMusicaYouTube'
+YTDLP_REPO = 'yt-dlp/yt-dlp'
+DENO_REPO = 'denoland/deno'
+
 
 # Ruta al ejecutable de FFmpeg portable (se puede sobrescribir con la variable
 # de entorno FFMPEG_PATH).

@@ -1,0 +1,210 @@
+name: Compilar y publicar Release
+
+# Se ejecuta al subir cambios a main, cada lunes y manualmente.
+# La app se actualiza sola desde la Release "latest", así que este workflow
+# es lo único que hay que mantener: no hace falta compilar ni subir nada a mano.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'gui.spec'
+      - 'requirements.txt'
+      - 'iconos/**'
+      - 'licenses/**'
+      - '.github/workflows/build-release.yml'
+  schedule:
+    # Lunes a las 06:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Publicar aunque no haya cambios'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Traer etiquetas
+        run: git fetch --tags --force
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Comprobar si hay cambios que publicar
+        id: decidir
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ytdlp = (Invoke-RestMethod `
+            -Uri 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest' `
+            -Headers @{
+              'User-Agent' = 'VideosMP3Downloader-CI'
+              'Authorization' = "Bearer $env:GH_TOKEN"
+            }).tag_name
+          $head = (git rev-parse HEAD).Trim()
+
+          $release = $null
+          try {
+            $json = gh release view --json tagName,body 2>$null
+            if ($LASTEXITCODE -eq 0 -and $json) {
+              $release = $json | ConvertFrom-Json
+            }
+          } catch {
+            $release = $null
+          }
+
+          $skip = $false
+          $force = '${{ github.event.inputs.force }}' -eq 'true'
+          if ($release -and -not $force) {
+            $tagSha = (git rev-list -n 1 $release.tagName 2>$null)
+            $ytTag = ''
+            if ([string]$release.body -match '(?m)^yt-dlp:\s*(\S+)') {
+              $ytTag = $Matches[1]
+            }
+            if ($tagSha -and $tagSha.Trim() -eq $head -and $ytTag -eq $ytdlp) {
+              $skip = $true
+            }
+          }
+
+          "skip=$($skip.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "ytdlp=$ytdlp" >> $env:GITHUB_OUTPUT
+          Write-Host "yt-dlp: $ytdlp | HEAD: $head | publicar: $(-not $skip)"
+
+      - name: Calcular la nueva versión
+        if: steps.decidir.outputs.skip != 'true'
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = [version](python -c "from version import APP_VERSION; print(APP_VERSION)").Trim()
+
+          $latest = [version]'0.0.0'
+          foreach ($tag in (git tag --list 'v*')) {
+            $texto = $tag.Substring(1)
+            $v = $null
+            if ([version]::TryParse($texto, [ref]$v)) {
+              if ($v -gt $latest) { $latest = $v }
+            }
+          }
+
+          if ($latest -ge $base) {
+            $nueva = [version]::new($latest.Major, $latest.Minor, $latest.Build + 1)
+          } else {
+            $nueva = $base
+          }
+
+          $contenido = @(
+            '# Versión de la aplicación. El workflow de GitHub Actions la reescribe'
+            '# automáticamente antes de compilar una Release.'
+            "APP_VERSION = `"$nueva`""
+          )
+          $contenido | Set-Content -Encoding utf8 version.py
+
+          "version=$nueva" >> $env:GITHUB_OUTPUT
+          Write-Host "Nueva versión: $nueva"
+
+      - name: Instalar dependencias
+        if: steps.decidir.outputs.skip != 'true'
+        run: python -m pip install --upgrade -r requirements.txt
+
+      - name: Descargar FFmpeg
+        if: steps.decidir.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_tmp -Force
+          $carpeta = Get-ChildItem ffmpeg_tmp -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force ffmpeg\bin | Out-Null
+          Copy-Item (Join-Path $carpeta.FullName 'bin\ffmpeg.exe') 'ffmpeg\bin\ffmpeg.exe'
+          if (Test-Path (Join-Path $carpeta.FullName 'bin\ffprobe.exe')) {
+            Copy-Item (Join-Path $carpeta.FullName 'bin\ffprobe.exe') 'ffmpeg\bin\ffprobe.exe'
+          }
+
+      - name: Compilar el ejecutable
+        if: steps.decidir.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          python -m PyInstaller gui.spec --noconfirm --clean
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Generar checksum y notas
+        if: steps.decidir.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = 'dist\Videos MP3 Downloader.exe'
+          if (-not (Test-Path $exe)) { throw 'No se generó el ejecutable.' }
+
+          # Nombre estable para el enlace releases/latest/download/...
+          $publico = 'dist\Videos.MP3.Downloader.exe'
+          Copy-Item $exe $publico -Force
+
+          $hash = (Get-FileHash -Algorithm SHA256 $publico).Hash.ToLower()
+          "$hash  Videos.MP3.Downloader.exe" | Set-Content -Encoding ascii SHA256SUMS.txt
+
+          $version = '${{ steps.version.outputs.version }}'
+          $ytdlp = '${{ steps.decidir.outputs.ytdlp }}'
+          $notas = @(
+            "## Videos MP3 Downloader $version"
+            ""
+            "- Motor de descarga: yt-dlp ``$ytdlp``. La app lo actualiza sola al abrirse."
+            "- SHA-256 del ejecutable: ``$hash``"
+            ""
+            "### Instalación"
+            ""
+            "1. Descarga ``Videos.MP3.Downloader.exe``."
+            "2. Ejecútalo. La primera vez creará la carpeta ``tools`` junto al programa"
+            "   y descargará yt-dlp y Deno automáticamente."
+            "3. Cuando haya una versión nueva, la app mostrará un aviso con el botón"
+            "   **Actualizar**."
+            ""
+            "yt-dlp: $ytdlp"
+          )
+          $notas | Set-Content -Encoding utf8 release_body.md
+
+      - name: Publicar la Release
+        if: steps.decidir.outputs.skip != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.version.outputs.version }}'
+          $tag = "v$version"
+
+          # Si el tag ya existiera (por ejemplo, al reintentar el workflow),
+          # se elimina antes de volver a publicar.
+          gh release delete $tag --yes --cleanup-tag 2>$null
+
+          gh release create $tag `
+            'dist\Videos.MP3.Downloader.exe' `
+            'README.md' `
+            'SHA256SUMS.txt' `
+            --title "Videos MP3 Downloader $version" `
+            --notes-file release_body.md `
+            --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
