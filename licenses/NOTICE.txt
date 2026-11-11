@@ -1,0 +1,5 @@
+Video2MP3 Downloader
+Copyright 2025 Bochi
+
+Licencia bajo Apache 2.0
+Ver LICENSE para más detalles

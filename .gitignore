@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Compilación y distribución (se generan con compilar.bat / PyInstaller)
+build/
+dist/
+
+# FFmpeg portable (binarios demasiado grandes para el repositorio)
+# Descárgalo y coloca ffmpeg/bin/ffmpeg.exe antes de compilar.
+ffmpeg/
+
+# Copias de seguridad locales
+backup_originales/
+
+# Temporales
+.temp/
+*.part
+*.ytdl
+*.tmp
+*.log

@@ -1,0 +1,8 @@
+Descargo de responsabilidad:
+Este software es solo para uso personal y educativo.
+No promueve la violación de derechos de autor ni los Términos de Servicio de ningún sitio web, incluyendo YouTube.
+Los usuarios deben verificar que el contenido descargado y las imágenes utilizadas (como las de Flaticon) no infrinjan derechos de autor, cumplan con las licencias aplicables (ver https://www.flaticon.com/terms y https://www.youtube.com/t/terms), y respeten las leyes de derechos de autor y regulaciones locales de su país.
+El software se proporciona 'tal cual', sin garantías de ningún tipo, ya sea expresa o implícita, incluyendo pero no limitándose a garantías de comerciabilidad, idoneidad para un propósito particular o no infracción. El autor no será responsable por ningún daño directo, indirecto, incidental, especial, ejemplar o consecuente (incluyendo, pero no limitándose a, pérdida de datos o beneficios) derivado del uso o la incapacidad de usar el software.
+Este software incluye dependencias de terceros (como yt-dlp y FFmpeg) con sus propias licencias, las cuales deben ser respetadas por los usuarios (ver NOTICE.txt para detalles). La redistribución de este software debe incluir las licencias de las dependencias y, si aplica, el código fuente modificado conforme a las licencias LGPL y GPL.
+El autor no se hace responsable del uso que los usuarios hagan de este programa.
+Este software no recopila ni almacena datos personales de los usuarios.
